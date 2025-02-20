@@ -1,0 +1,65 @@
+import javax.net.ssl.*;
+import java.io.*;
+import java.net.*;
+
+public class SecureDropboxServer {
+    private static final int PORT = 5000;
+    private static final String STORAGE_DIR = "server_storage/";
+
+    public static void main(String[] args) throws Exception {
+        SSLServerSocketFactory ssf = (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
+        SSLServerSocket serverSocket = (SSLServerSocket) ssf.createServerSocket(PORT);
+        System.out.println("Secure Dropbox Server started...");
+
+        File storage = new File(STORAGE_DIR);
+        if (!storage.exists()) storage.mkdirs();
+
+        while (true) {
+            SSLSocket clientSocket = (SSLSocket) serverSocket.accept();
+            new ClientHandler(clientSocket).start();
+        }
+    }
+
+    static class ClientHandler extends Thread {
+        private SSLSocket socket;
+
+        ClientHandler(SSLSocket socket) {
+            this.socket = socket;
+        }
+
+        public void run() {
+            try (DataInputStream dis = new DataInputStream(socket.getInputStream());
+                 DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
+
+                String action = dis.readUTF();
+                String fileName = dis.readUTF();
+                File file = new File(STORAGE_DIR + fileName);
+
+                if ("UPLOAD".equals(action)) {
+                    FileOutputStream fos = new FileOutputStream(file);
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = dis.read(buffer)) != -1) {
+                        fos.write(buffer, 0, bytesRead);
+                    }
+                    fos.close();
+                    dos.writeUTF("UPLOAD SUCCESS");
+                } else if ("DOWNLOAD".equals(action)) {
+                    if (file.exists()) {
+                        FileInputStream fis = new FileInputStream(file);
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = fis.read(buffer)) != -1) {
+                            dos.write(buffer, 0, bytesRead);
+                        }
+                        fis.close();
+                    } else {
+                        dos.writeUTF("FILE NOT FOUND");
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
