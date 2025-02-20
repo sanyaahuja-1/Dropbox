@@ -1,0 +1,86 @@
+import javax.net.ssl.*;
+import javax.swing.*;
+import java.io.*;
+import java.net.*;
+
+public class SecureDropboxClient {
+    private static final String SERVER_HOST = "localhost";
+    private static final int SERVER_PORT = 5000;
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(SecureDropboxClient::createGUI);
+    }
+
+    private static void createGUI() {
+        JFrame frame = new JFrame("My Dropbox");
+        frame.setSize(400, 200);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        JButton uploadBtn = new JButton("Upload File");
+        JButton downloadBtn = new JButton("Download File");
+
+        uploadBtn.addActionListener(e -> uploadFile());
+        downloadBtn.addActionListener(e -> downloadFile());
+
+        JPanel panel = new JPanel();
+        panel.add(uploadBtn);
+        panel.add(downloadBtn);
+        frame.add(panel);
+
+        frame.setVisible(true);
+    }
+
+    private static void uploadFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        int returnValue = fileChooser.showOpenDialog(null);
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            try (SSLSocket socket = createSecureSocket();
+                 DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+                 FileInputStream fis = new FileInputStream(selectedFile)) {
+
+                dos.writeUTF("UPLOAD");
+                dos.writeUTF(selectedFile.getName());
+
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    dos.write(buffer, 0, bytesRead);
+                }
+                JOptionPane.showMessageDialog(null, "File uploaded successfully!");
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static void downloadFile() {
+        String fileName = JOptionPane.showInputDialog("Enter file name to download:");
+        if (fileName != null && !fileName.isEmpty()) {
+            try (SSLSocket socket = createSecureSocket();
+                 DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+                 DataInputStream dis = new DataInputStream(socket.getInputStream());
+                 FileOutputStream fos = new FileOutputStream("client_downloads/" + fileName)) {
+
+                dos.writeUTF("DOWNLOAD");
+                dos.writeUTF(fileName);
+
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = dis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                }
+                JOptionPane.showMessageDialog(null, "File downloaded successfully!");
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static SSLSocket createSecureSocket() throws IOException {
+        SSLSocketFactory sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
+        return (SSLSocket) sf.createSocket(SERVER_HOST, SERVER_PORT);
+    }
+}
